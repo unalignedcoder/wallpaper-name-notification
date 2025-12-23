@@ -1,6 +1,6 @@
 # Wallpaper Name Notification
 
-A lightweight PowerShell utility that monitors your desktop wallpaper changes and sends a Windows system notification displaying the name of the current image.
+A lightweight PowerShell utility that monitors the current Windows Slideshow desktop wallpaper, and shows a notification with the wallpaper name in it.
 
 <img width="688" height="432" alt="image" src="https://github.com/user-attachments/assets/2f323ce1-03ce-4350-a23c-b5dd34e7dd0b" />
 
