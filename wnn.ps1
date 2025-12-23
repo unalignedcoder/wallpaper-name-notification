@@ -14,12 +14,15 @@
 	https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
- initial commit
+
+    some adjustment made
+    better comments
+    minor fixes
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "0.1.2"
+$scriptVersion = "1.0.7"
 
 # ============= Configuration ==============
 
@@ -50,7 +53,7 @@ while ($true) {
         $path = $matches[0]
         $filename = [System.IO.Path]::GetFileNameWithoutExtension($path)
 
-        # Strip unwanted prefix if present
+        # Strip unwanted prefix if present (see my "AutoTheme" script project)
         $cleanName = $filename -replace "^_0_AutoTheme_", ""
 
         if ($cleanName -ne $lastFile -and $cleanName) {
