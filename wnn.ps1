@@ -15,14 +15,12 @@
 
 .NOTES
 
-    some adjustment made
-    better comments
-    minor fixes
+    Several fixes and adjustments
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.7"
+$scriptVersion = "1.0.8"
 
 # ============= Configuration ==============
 
