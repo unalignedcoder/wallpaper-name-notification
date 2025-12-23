@@ -15,16 +15,17 @@
 
 .NOTES
 
-    Several fixes and adjustments
+    Several fixes and adjustment
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.8"
+$scriptVersion = "1.0.9"
 
 # ============= Configuration ==============
 
-# Write Wallpaper name in registry, for other apps/scripts to read
+<# Write Wallpaper name in registry, for other apps/scripts to read
+this is mostly for future integration with my AutoTheme script. #>
 $writeRegistry = $false
 
 # How often to poll for wallpaper changes (milliseconds)
