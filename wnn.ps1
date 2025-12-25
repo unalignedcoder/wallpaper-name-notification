@@ -3,25 +3,25 @@
     Monitor the current Windows desktop wallpaper and show a BurntToast notification when it changes.
 
 .DESCRIPTION
-    This script polls the current wallpaper cache in the Registry (TranscodedImageCache),
-    and extracts the currently active wallpaper file basename (withput path or extension).
-    When the slideshow changes wallpaper, the script displays the wallpaper name as an overlay
-    over the background using Rainmeter, or it displays a Windows notification using the BurntToast module. 
-    This is conceived for when wallpaper names are meaningful in some way (artist, photographer, title, year etc.)
+    This script polls the current wallpaper cache in the Registry (the 'TranscodedImageCache' value),
+    and extracts the currently active wallpaper file basename (without path or extension).
+    When the slideshow changes wallpaper, the script displays the wallpaper name as a Rainmeter overlay
+    over the background, or as a Windows notification using the BurntToast module. 
     This is a companion script for my AutoTheme project, but can be used independently.
 
 .LINK
     https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
-        - Added Rainmeter integration (see ini file as an example)
-        - Added logging system
-        - Several improvements and fixes
+    - Added Rainmeter integration (see wnn.ini)
+    - Added logging system
+    - Added workflow to automate tagging and releases
+    - Several improvements and fixes
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.20"
+$scriptVersion = "1.0.26"
 
 # ============= Configuration ==============
 
