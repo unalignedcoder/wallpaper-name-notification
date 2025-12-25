@@ -41,7 +41,6 @@ jobs:
       id: check_tag
       shell: bash
       run: |
-        # In Bash, we use the env variable directly
         if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
           echo "TAG_EXISTS=true" >> $GITHUB_ENV
         else
@@ -54,7 +53,6 @@ jobs:
       shell: pwsh
       run: |
         Install-Module -Name ps2exe -Force -Scope CurrentUser
-        # Using $env:NEW_VERSION is safer inside a pwsh shell block
         Invoke-PS2EXE -InputFile "wnn.ps1" `
                       -OutputFile "wnn.exe" `
                       -noConsole `
@@ -88,15 +86,10 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path release_dist
-        # Verify exe exists before zipping to avoid errors
-        if (Test-Path "wnn.exe") {
-            Copy-Item wnn.ps1, wnn.ini, wnn.exe -Destination release_dist/
-            Compress-Archive -Path release_dist/* -DestinationPath "wnn-v$env:NEW_VERSION.zip" -Force
-            "ZIP_FILE=wnn-v$env:NEW_VERSION.zip" >> $env:GITHUB_ENV
-        } else {
-            Write-Error "wnn.exe was not found! Build likely skipped."
-            exit 1
-        }
+        # Copy only script and ini (excluding exe from zip)
+        Copy-Item wnn.ps1, wnn.ini -Destination release_dist/
+        Compress-Archive -Path release_dist/* -DestinationPath "wnn-v$env:NEW_VERSION.zip" -Force
+        "ZIP_FILE=wnn-v$env:NEW_VERSION.zip" >> $env:GITHUB_ENV
 
     - name: Create Release
       if: env.TAG_EXISTS == 'false'
