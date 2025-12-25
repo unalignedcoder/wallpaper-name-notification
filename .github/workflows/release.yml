@@ -1,0 +1,85 @@
+name: Create Release
+
+# This Workflow automatically creates a Github Release when new tags are pushed to the repository.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Git identity
+      run: |
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+    # 1. Extract version from wnn.ps1
+    - name: Extract version from script
+      id: extract_version
+      run: |
+        NEW_VERSION=$(grep -Po '(?<=\$scriptVersion = ")([0-9]+\.[0-9]+\.[0-9]+)' wnn.ps1)
+        echo "New version: $NEW_VERSION"
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+    # 2. Check if the tag already exists
+    - name: Check if tag exists
+      id: check_tag
+      run: |
+        if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+          echo "Tag v$NEW_VERSION already exists"
+          echo "TAG_EXISTS=true" >> $GITHUB_ENV
+        else
+          echo "Tag v$NEW_VERSION does not exist"
+          echo "TAG_EXISTS=false" >> $GITHUB_ENV
+        fi
+
+    # 3. Create and push tag (only if version was bumped)
+    - name: Create and push tag (if it doesn't exist)
+      if: env.TAG_EXISTS == 'false'
+      run: |
+        git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+        git push origin "v$NEW_VERSION"
+
+    # 4. Extract release notes from the .NOTES section of wnn.ps1
+    - name: Extract release notes from script
+      run: |
+        # Pulls text between .NOTES and #> header
+        RELEASE_NOTES=$(sed -n '/\.NOTES/,/#>/p' wnn.ps1 | sed '1d;$d')
+        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+        echo "$RELEASE_NOTES" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
+    # 5. Zip the script and the Rainmeter skin
+    - name: Zip files
+      run: |
+        mkdir -p release_dist
+        cp wnn.ps1 wnn.ini release_dist/
+        # -j (junk paths) ensures files aren't nested in folders inside the zip
+        zip -j wnn-v$NEW_VERSION.zip release_dist/*
+        echo "ZIP_FILE=wnn-v$NEW_VERSION.zip" >> $GITHUB_ENV
+
+    # 6. Create the Github Release and upload the Zip
+    - name: Create Release
+      if: env.TAG_EXISTS == 'false'
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ env.NEW_VERSION }}
+        name: Release v${{ env.NEW_VERSION }}
+        body: ${{ env.RELEASE_NOTES }}
+        draft: false
+        prerelease: false
+        files: ${{ env.ZIP_FILE }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
