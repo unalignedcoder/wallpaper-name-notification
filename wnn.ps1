@@ -21,7 +21,7 @@
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.26"
+$scriptVersion = "1.0.27"
 
 # ============= Configuration ==============
 
