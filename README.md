@@ -16,11 +16,12 @@ Or in a [Rainmeter](https://ranimeter.net) overlay on the desktop background:
 <img width="1251" height="581" alt="image" src="https://github.com/user-attachments/assets/1ee3a21a-eacd-4589-a316-fff5b7c3df62" />
 <p>&nbsp;</p>
 
-This script is particulary indicated for slideshows in which wallpapers have intelligible names (photographer, artist, title, mood, subject, season etc.), but, with approrpiately named wallpapers, it could be used to send any sort of messages as the slideshow progresses.
-
 The name of the wallpaper can be clicked, to open a google search with the wallpaper name as search term.
 
 The included `wnn.ini` file is ready to be loaded in Rainmeter, but it can of course be modified in infinite ways, as preferred by the user.
+
+## Purpose
+This script is particulary indicated for slideshows in which wallpapers have intelligible names (photographer, artist, title, mood, subject, season etc.), but, with approrpiately named wallpapers, it could be used to send any sort of inspiring, funny or interesting messages to the user, as the slideshow progresses.
 
 ## Installation
 Download the [latest release](https://github.com/unalignedcoder/wallpaper-name-notification/releases).
