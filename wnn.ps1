@@ -1,42 +1,96 @@
 <#
 .SYNOPSIS
-	Monitor the current Windows desktop wallpaper and show a BurntToast notification when it changes.
+    Monitor the current Windows desktop wallpaper and show a BurntToast notification when it changes.
 
 .DESCRIPTION
-	This script polls the current wallpaper cache (TranscodedImageCache) in the registry,
-	extracts the currently active wallpaper file basename (withput path or extension) 
-    and displays a Windows toast notification using the BurntToast module when the wallpaper changes. 
+    This script polls the current wallpaper cache (TranscodedImageCache) in the registry,
+    and extracts the currently active wallpaper file basename (withput path or extension).
+    When the slideshow changes wallpaper, the script displays its name as an overlay
+    over the background using Rainmeter, or it displays a Windows notification using the BurntToast module. 
     Conceived for when wallpaper names are meaningful in some way (artist, photographer, title, year etc).
     It is intended to run continuously (e.g., from a scheduled task or startup shortcut).
     This is a companion script for my AutoTheme project, but can be used independently.
 
 .LINK
-	https://github.com/unalignedcoder/monitor-wallpaper
+    https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
-
-    Several fixes and adjustment
+    - Added Rainmeter integration (see ini file as an example)
+    - Added logging system
+    - Several improvements and fixes
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.9"
+$scriptVersion = "1.0.18"
 
 # ============= Configuration ==============
 
-<# Write Wallpaper name in registry, for other apps/scripts to read
-this is mostly for future integration with my AutoTheme script. #>
-$writeRegistry = $false
+<# Write Wallpaper name in Registry, for other apps/scripts to read.
+This is required to be $true for the Rainmeter method (see below.)
+Also meant be used for future integration with my AutoTheme script. #>
+$writeRegistry = $true
+
+<# How to display the wallpaper name?
+Options: "notification" and "rainmeter" (more will be added in future.)
+"notification" requires the BurnToast PowerShell module, and shows a Windows notification on screen.
+"rainmeter" requires the Rainmeter tool (rainmeter.net), and shows the wallpaper name as an overlay on the desktop. #>
+$howToDisplayName = "rainmeter"
 
 # How often to poll for wallpaper changes (milliseconds)
 $pollMs = 30000 #30 seconds
 
+# Logging Configuration
+$logFile     = $true
+$logReverse  = $true
+$logFilePath = "$PSScriptRoot\wallpaper-monitor.log"
+
 # ============= Script Logic ==============
 
-# Requires BurntToast module
-Import-Module BurntToast
+# Logging Function using Write-Information and ANSI colors
+function LogThis {
+    param ([string]$Message, [string]$Color = "White")
+    
+    # Define ANSI color codes
+    $colors = @{
+        "Red"    = "$([char]27)[31m"
+        "Green"  = "$([char]27)[32m"
+        "Yellow" = "$([char]27)[33m"
+        "Cyan"   = "$([char]27)[36m"
+        "White"  = "$([char]27)[37m"
+        "Reset"  = "$([char]27)[0m"
+    }
 
-Write-Output "Polling every $pollMs ms"
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $plainMessage = "[$timestamp] $Message"
+    
+    # Use the requested color or default to White
+    $colorCode = if ($colors.ContainsKey($Color)) { $colors[$Color] } else { $colors["White"] }
+    $coloredMessage = "$colorCode$plainMessage$($colors['Reset'])"
+
+    # Write to Information Stream (Stream 6) - visible in console by default in PS7+
+    # For PS5.1, we set InformationAction to ensure visibility
+    Write-Information $coloredMessage -InformationAction Continue
+    
+    if ($logFile) {
+        $logDir = Split-Path $logFilePath
+        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+        if ($logReverse) {
+            $existing = if (Test-Path $logFilePath) { Get-Content $logFilePath -Raw } else { "" }
+            "$plainMessage`r`n$existing" | Set-Content $logFilePath -Encoding UTF8
+        } else {
+            $plainMessage | Out-File -Append $logFilePath -Encoding UTF8
+        }
+    }
+}
+
+# Only import BurntToast if a notification is required
+if ($howToDisplayName -eq "notification" -or $howToDisplayName -notmatch "rainmeter") {
+    Import-Module BurntToast
+}
+
+LogThis "Polling every $pollMs ms" "Yellow"
 
 # Track last filename
 $lastFile = ""
@@ -57,13 +111,35 @@ while ($true) {
 
         if ($cleanName -ne $lastFile -and $cleanName) {
 
-            # update the registry value with the clean name
-            if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
+            # Determine behavior based on $howToDisplayName
+            if ($howToDisplayName -eq "notification") {
+                
+                # update the registry value with the clean name
+                if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
 
-            # Show toast notification using your AppId
-            New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
+                # Show toast notification
+                New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
+                LogThis "Notification sent for: $cleanName" "Green"
 
-            Write-Output "Your wallpaper: $cleanName"
+            } elseif ($howToDisplayName -eq "rainmeter") {
+                
+                # ONLY update the registry (Rainmeter requires this, regardless of $writeRegistry setting)
+                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName
+                
+                # Force Rainmeter to refresh and pick up the new registry value immediately
+                if (Test-Path "C:\Program Files\Rainmeter\Rainmeter.exe") {
+                    & "C:\Program Files\Rainmeter\Rainmeter.exe" !RefreshApp
+                }
+                
+                LogThis "Registry updated and Rainmeter refreshed: $cleanName" "Cyan"
+
+            } else {
+                # Fallback: if value is null or unrecognized
+                if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
+                New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
+                LogThis "Fallback triggered for: $cleanName" "Red"
+            }
+
             $lastFile = $cleanName
         }
     }
