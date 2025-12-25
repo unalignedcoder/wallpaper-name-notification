@@ -14,12 +14,13 @@
     https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
-    Fix release workflow and version bump
+    fixing workflows
+    
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.30"
+$scriptVersion = "1.0.31"
 
 # ============= Configuration ==============
 
