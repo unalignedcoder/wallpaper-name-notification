@@ -6,3 +6,4 @@
 *.slnx.sqlite
 [Bb]in/
 [Oo]bj/
+/logs
