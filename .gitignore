@@ -7,3 +7,5 @@
 [Bb]in/
 [Oo]bj/
 /logs
+/.github/workflows/release.old
+/wnn.exe

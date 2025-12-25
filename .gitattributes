@@ -1,0 +1,8 @@
+# Handle line endings automatically for text files
+* text=auto
+
+# Explicitly set shell scripts to use LF (so they don't break on Linux)
+*.sh text eol=lf
+
+# Explicitly set PowerShell scripts to use CRLF
+*.ps1 text eol=crlf

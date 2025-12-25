@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Monitor the current Windows desktop wallpaper and show a BurntToast notification when it changes.
+    Monitor the current Windows desktop wallpaper and show a BurntToast notification or Rainmeter overlay when it changes.
 
 .DESCRIPTION
     This script polls the current wallpaper cache in the Registry (the 'TranscodedImageCache' value),
@@ -8,20 +8,18 @@
     When the slideshow changes wallpaper, the script displays the wallpaper name as a Rainmeter overlay
     over the background, or as a Windows notification using the BurntToast module. 
     This is a companion script for my AutoTheme project, but can be used independently.
+    It comes with a convenient, bundled .exe, compiled thanks to PS2EXE.
 
 .LINK
     https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
-    - Added Rainmeter integration (see wnn.ini)
-    - Added logging system
-    - Added workflow to automate tagging and releases
-    - Several improvements and fixes
+    Fix release workflow and version bump
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.27"
+$scriptVersion = "1.0.359"
 
 # ============= Configuration ==============
 
@@ -44,33 +42,92 @@ $logFile     = $true
 $logReverse  = $true
 $logFilePath = "$PSScriptRoot\wallpaper-monitor.log"
 
-# ============= Script Logic ==============
+# ============= Detection Logic ==============
 
-# Logging Function using Write-Information and ANSI colors
+function Get-ExecutionEnvironment {
+    <# 
+    Detects the environment to prevent 'Write-Information' from creating 
+    popup dialogs when no console window is present.
+    #>
+    $pPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    
+    # 1. Is it a compiled EXE? (Checking if host is not powershell.exe)
+    $isExe = ($pPath -match '\.exe$' -and $pPath -notmatch 'powershell\.exe')
+    
+    # 2. Is it running via Task Scheduler?
+    $isTask = ($null -ne [Environment]::GetEnvironmentVariable("TaskName")) -or ($host.UI.RawUI.WindowTitle -match "taskeng.exe")
+    
+    # 3. Is the session non-interactive?
+    $isNonInteractive = [Environment]::UserInteractive -eq $false
+
+    return [PSCustomObject]@{
+        IsExe    = $isExe
+        IsSilent = ($isExe -or $isTask -or $isNonInteractive)
+    }
+}
+
+# Run detection once at startup
+$EnvInfo = Get-ExecutionEnvironment
+
+# ============= System Tray Icon ==============
+
+# Check if container process is exe, and if so, create a tray icon
+if ($EnvInfo.IsExe -and [Environment]::UserInteractive) {
+    Add-Type -AssemblyName System.Windows.Forms
+    $trayIcon = New-Object System.Windows.Forms.NotifyIcon
+    
+    # Extract the icon from the EXE file itself
+    $trayIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    $trayIcon.Text = "Wallpaper Name Notifier (v$scriptVersion)"
+    $trayIcon.Visible = $true
+
+    # Right-click menu for the Tray Icon
+    $contextMenu = New-Object System.Windows.Forms.ContextMenu
+
+    # Add a disabled version label at the top
+    $versionLabel = $contextMenu.MenuItems.Add("WNN v$scriptVersion")
+    $versionLabel.Enabled = $false
+    $contextMenu.MenuItems.Add("-") # This adds a separator line
+    
+    $exitButton = $contextMenu.MenuItems.Add("Exit")
+    $exitButton.add_Click({
+        $trayIcon.Visible = $false
+        Stop-Process -Id $PID
+    })
+    
+    # Show a brief balloon tip confirming startup / only for debug purposes
+    # $trayIcon.ShowBalloonTip(3000, "WNN Active", "Monitoring wallpaper changes in the background.", "Info")
+}
+
+# ============= Logging Function ==============
+
 function LogThis {
     param ([string]$Message, [string]$Color = "White")
     
-    # Define ANSI color codes
-    $colors = @{
-        "Red"    = "$([char]27)[31m"
-        "Green"  = "$([char]27)[32m"
-        "Yellow" = "$([char]27)[33m"
-        "Cyan"   = "$([char]27)[36m"
-        "White"  = "$([char]27)[37m"
-        "Reset"  = "$([char]27)[0m"
-    }
-
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $plainMessage = "[$timestamp] $Message"
     
-    # Use the requested color or default to White
-    $colorCode = if ($colors.ContainsKey($Color)) { $colors[$Color] } else { $colors["White"] }
-    $coloredMessage = "$colorCode$plainMessage$($colors['Reset'])"
+    # Log to terminal ONLY if not in a silent environment (Prevents MsgBox popups in EXE/Task mode)
+    if (-not $EnvInfo.IsSilent) {
+        # Define ANSI color codes
+        $colors = @{
+            "Red"    = "$([char]27)[31m"
+            "Green"  = "$([char]27)[32m"
+            "Yellow" = "$([char]27)[33m"
+            "Cyan"   = "$([char]27)[36m"
+            "White"  = "$([char]27)[37m"
+            "Reset"  = "$([char]27)[0m"
+        }
 
-    # Write to Information Stream (Stream 6) - visible in console by default in PS7+
-    # For PS5.1, we set InformationAction to ensure visibility
-    Write-Information $coloredMessage -InformationAction Continue
-    
+        # Use the requested color or default to White
+        $colorCode = if ($colors.ContainsKey($Color)) { $colors[$Color] } else { $colors["White"] }
+        $coloredMessage = "$colorCode$plainMessage$($colors['Reset'])"
+
+        # Write to Information Stream (Stream 6)
+        Write-Information $coloredMessage -InformationAction Continue
+    }
+
+    # Logging to file (Always active regardless of environment)
     if ($logFile) {
         $logDir = Split-Path $logFilePath
         if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
@@ -84,6 +141,8 @@ function LogThis {
     }
 }
 
+# ============= Main Script Execution ==============
+
 # Only import BurntToast if a notification is required
 if ($howToDisplayName -eq "notification" -or $howToDisplayName -notmatch "rainmeter") {
     Import-Module BurntToast
@@ -91,56 +150,70 @@ if ($howToDisplayName -eq "notification" -or $howToDisplayName -notmatch "rainme
 
 LogThis "Polling every $pollMs ms" "Yellow"
 
-# Track last filename
+# Track last filename to avoid duplicate triggers
 $lastFile = ""
 
 while ($true) {
+    try {
+        # Decode TranscodedImageCache, from registry binary to string
+        $bytes   = (Get-ItemProperty "HKCU:\Control Panel\Desktop" -ErrorAction Stop).TranscodedImageCache
+        $decoded = [System.Text.Encoding]::Unicode.GetString($bytes) -replace "`0",""
 
-    # Decode TranscodedImageCache, from registry binary to string
-    $bytes   = (Get-ItemProperty "HKCU:\Control Panel\Desktop").TranscodedImageCache
-    $decoded = [System.Text.Encoding]::Unicode.GetString($bytes) -replace "`0",""
+        # Extract the file path using regex
+        if ($decoded -match "[A-Z]:\\.*") {
+            $path = $matches[0]
+            $filename = [System.IO.Path]::GetFileNameWithoutExtension($path)
 
-    # Extract the file path using regex
-    if ($decoded -match "[A-Z]:\\.*") {
-        $path = $matches[0]
-        $filename = [System.IO.Path]::GetFileNameWithoutExtension($path)
+            # Strip unwanted prefix if present (see my "AutoTheme" script project)
+            $cleanName = $filename -replace "^_0_AutoTheme_", ""
 
-        # Strip unwanted prefix if present (see my "AutoTheme" script project)
-        $cleanName = $filename -replace "^_0_AutoTheme_", ""
+            if ($cleanName -ne $lastFile -and $cleanName) {
 
-        if ($cleanName -ne $lastFile -and $cleanName) {
+                # Determine behavior based on $howToDisplayName
+                if ($howToDisplayName -eq "notification") {
+                    
+                    # Update the registry value with the clean name
+                    if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
 
-            # Determine behavior based on $howToDisplayName
-            if ($howToDisplayName -eq "notification") {
-                
-                # update the registry value with the clean name
-                if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
+                    # Consistent Notification Logic
+                    if ($EnvInfo.IsExe -and $global:trayIcon) {
 
-                # Show toast notification
-                New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
-                LogThis "Notification sent for: $cleanName" "Green"
+                        # Tray Balloon Tip for .exe users
+                        $global:trayIcon.ShowBalloonTip(5000, "Your Wallpaper:", $cleanName, "None")
+                        LogThis "Balloon Tip sent for: $cleanName" "Green"
 
-            } elseif ($howToDisplayName -eq "rainmeter") {
-                
-                # ONLY update the registry (Rainmeter requires this, regardless of $writeRegistry setting)
-                Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName
-                
-                # Force Rainmeter to refresh and pick up the new registry value immediately
-                if (Test-Path "C:\Program Files\Rainmeter\Rainmeter.exe") {
-                    & "C:\Program Files\Rainmeter\Rainmeter.exe" !RefreshApp
+                    } else {
+
+                        # BurnToast notifications for .ps1 users.
+                        New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
+                        LogThis "BurntToast notification sent for: $cleanName" "Green"
+                    }
+
+                } elseif ($howToDisplayName -eq "rainmeter") {
+                    
+                    # ONLY update the registry (Rainmeter requires this, regardless of $writeRegistry setting)
+                    Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName
+                    
+                    # Force Rainmeter to refresh and pick up the new registry value immediately
+                    if (Test-Path "C:\Program Files\Rainmeter\Rainmeter.exe") {
+                        & "C:\Program Files\Rainmeter\Rainmeter.exe" !RefreshApp
+                    }
+                    
+                    LogThis "Registry updated and Rainmeter refreshed: $cleanName" "Cyan"
+
+                } else {
+
+                    # Fail-Safe: Log the error, but don't annoy the user with a fallback notification
+                    LogThis "Configuration Error: '$howToDisplayName' is not a valid display option." "Red"
+
+                    if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
                 }
-                
-                LogThis "Registry updated and Rainmeter refreshed: $cleanName" "Cyan"
 
-            } else {
-                # Fallback: if value is null or unrecognized
-                if ($writeRegistry) { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperName" -Value $cleanName }
-                New-BurntToastNotification -Text "Your Wallpaper: ", $cleanName
-                LogThis "Fallback triggered for: $cleanName" "Red"
+                $lastFile = $cleanName
             }
-
-            $lastFile = $cleanName
         }
+    } catch {
+        LogThis "Error reading wallpaper cache: $($_.Exception.Message)" "Red"
     }
 
     Start-Sleep -Milliseconds $pollMs

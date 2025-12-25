@@ -1,6 +1,5 @@
 name: Create Release
 
-# This Workflow automatically creates a Github Release when new tags are pushed to the repository.
 on:
   push:
     branches:
@@ -11,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - name: Checkout repository
@@ -24,62 +23,83 @@ jobs:
         git config --global user.name "${{ github.actor }}"
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
 
-    # 1. Extract version from wnn.ps1
     - name: Extract version from script
       id: extract_version
+      shell: pwsh
       run: |
-        NEW_VERSION=$(grep -Po '(?<=\$scriptVersion = ")([0-9]+\.[0-9]+\.[0-9]+)' wnn.ps1)
-        echo "New version: $NEW_VERSION"
-        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+        $content = Get-Content "wnn.ps1" -Raw
+        if ($content -match '\$scriptVersion\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"') {
+            $version = $matches[1]
+            "NEW_VERSION=$version" >> $env:GITHUB_ENV
+            Write-Host "Found version: $version"
+        } else {
+            Write-Error "Could not find version string in wnn.ps1"
+            exit 1
+        }
 
-    # 2. Check if the tag already exists
     - name: Check if tag exists
       id: check_tag
+      shell: bash
       run: |
         if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-          echo "Tag v$NEW_VERSION already exists"
           echo "TAG_EXISTS=true" >> $GITHUB_ENV
         else
-          echo "Tag v$NEW_VERSION does not exist"
           echo "TAG_EXISTS=false" >> $GITHUB_ENV
         fi
 
-    # 3. Create and push tag (only if version was bumped)
+    # --- COMPILE PS2EXE ---
+    - name: Compile PowerShell to EXE
+      if: env.TAG_EXISTS == 'false'
+      shell: pwsh
+      run: |
+        Install-Module -Name ps2exe -Force -Scope CurrentUser
+        Invoke-PS2EXE -InputFile "wnn.ps1" `
+                      -OutputFile "wnn.exe" `
+                      -noConsole `
+                      -title "Wallpaper Name Notifier" `
+                      -description "Monitors wallpaper changes" `
+                      -company "UnalignedCoder" `
+                      -version "${{ env.NEW_VERSION }}" `
+                      -iconFile "wnn.ico"
+    # -----------------------------
+
     - name: Create and push tag (if it doesn't exist)
       if: env.TAG_EXISTS == 'false'
+      shell: bash
       run: |
         git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
         git push origin "v$NEW_VERSION"
 
-    # 4. Extract release notes from the .NOTES section of wnn.ps1
     - name: Extract release notes from script
+      id: extract_notes
+      shell: pwsh
       run: |
-        # Pulls text between .NOTES and #> header
-        RELEASE_NOTES=$(sed -n '/\.NOTES/,/#>/p' wnn.ps1 | sed '1d;$d')
-        echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-        echo "$RELEASE_NOTES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
+        $content = Get-Content "wnn.ps1" -Raw
+        # Uses regex to find text between .NOTES and the closing #>
+        if ($content -match '(?s)\.NOTES(.*?)(?=#>)') {
+            $notes = $matches[1].Trim()
+            "RELEASE_NOTES<<EOF" >> $env:GITHUB_ENV
+            $notes >> $env:GITHUB_ENV
+            "EOF" >> $env:GITHUB_ENV
+        }
 
-    # 5. Zip the script and the Rainmeter skin
     - name: Zip files
+      shell: pwsh
       run: |
-        mkdir -p release_dist
-        cp wnn.ps1 wnn.ini release_dist/
-        # -j (junk paths) ensures files aren't nested in folders inside the zip
-        zip -j wnn-v$NEW_VERSION.zip release_dist/*
-        echo "ZIP_FILE=wnn-v$NEW_VERSION.zip" >> $GITHUB_ENV
+        New-Item -ItemType Directory -Force -Path release_dist
+        Copy-Item wnn.ps1, wnn.ini, wnn.exe -Destination release_dist/
+        Compress-Archive -Path release_dist/* -DestinationPath "wnn-v${{ env.NEW_VERSION }}.zip" -Force
+        "ZIP_FILE=wnn-v${{ env.NEW_VERSION }}.zip" >> $env:GITHUB_ENV
 
-    # 6. Create the Github Release and upload the Zip
     - name: Create Release
       if: env.TAG_EXISTS == 'false'
-      id: create_release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ env.NEW_VERSION }}
         name: Release v${{ env.NEW_VERSION }}
         body: ${{ env.RELEASE_NOTES }}
-        draft: false
-        prerelease: false
-        files: ${{ env.ZIP_FILE }}
+        files: |
+          ${{ env.ZIP_FILE }}
+          wnn.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
