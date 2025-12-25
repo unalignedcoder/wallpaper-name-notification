@@ -15,14 +15,14 @@
     https://github.com/unalignedcoder/monitor-wallpaper
 
 .NOTES
-    - Added Rainmeter integration (see ini file as an example)
+    Version 1.0.19 updated via pre-commit.
     - Added logging system
     - Several improvements and fixes
 #>
 
 # ============= Script Version ==============
 
-$scriptVersion = "1.0.18"
+$scriptVersion = "1.0.19"
 
 # ============= Configuration ==============
 
