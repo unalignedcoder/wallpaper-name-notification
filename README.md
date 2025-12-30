@@ -39,3 +39,5 @@ Within the script file, you can modify a number of options. Explanations are inc
 After having been run once, the script will contiue monitoring wallpaper changes and showing notifications until interrupted.
 
 The powershell window can be completely hidden if ran from Task Scheduler or a shortcut, with the `-WindowStyle hidden` switch.
+
+<p align=center>Why, thank you for asking!<br />👉 You can donate to all my projects <a href="https://www.buymeacoffee.com/unalignedcoder" target="_blank" title="buymeacoffee.com">here</a>👈</p>
